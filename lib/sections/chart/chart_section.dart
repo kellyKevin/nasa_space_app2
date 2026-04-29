@@ -1,7 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../models/emission.dart';
+import '../../services/api_service.dart';
 
-class ChartSection extends StatelessWidget {
+class ChartSection extends StatefulWidget {
+  @override
+  _ChartSectionState createState() => _ChartSectionState();
+}
+
+class _ChartSectionState extends State<ChartSection> {
+  final ApiService _apiService = ApiService();
+  List<Emission> _emissions = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    final data = await _apiService.fetchEmissions();
+    if (mounted) {
+      setState(() {
+        _emissions = data.where((e) => e.emissions > 0).toList();
+        _isLoading = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -10,7 +37,7 @@ class ChartSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Section Title
-          Text(
+          const Text(
             'CO₂ Data Visualization',
             style: TextStyle(
               fontSize: 24,
@@ -18,7 +45,7 @@ class ChartSection extends StatelessWidget {
               color: Colors.black87,
             ),
           ),
-          const SizedBox(height: 16), // Add some spacing between title and chart
+          const SizedBox(height: 16),
 
           // Chart Container
           Container(
@@ -32,69 +59,120 @@ class ChartSection extends StatelessWidget {
                   color: Colors.grey.withOpacity(0.5),
                   spreadRadius: 5,
                   blurRadius: 7,
-                  offset: const Offset(0, 3), // changes position of shadow
+                  offset: const Offset(0, 3),
                 ),
               ],
             ),
-            child: LineChart(
-              LineChartData(
-                gridData: const FlGridData(show: true),
-                titlesData: const FlTitlesData(show: true),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(color: const Color(0xff37434d), width: 1),
-                ),
-                lineBarsData: [
-                  LineChartBarData(
-                    spots: [
-                      const FlSpot(0, 1),
-                      const FlSpot(1, 1.5),
-                      const FlSpot(2, 1.4),
-                      const FlSpot(3, 3.4),
-                      const FlSpot(4, 2),
-                      const FlSpot(5, 2.2),
-                      const FlSpot(6, 1.8),
-                    ],
-                    isCurved: true,
-                    color: Colors.blue,
-                    barWidth: 3,
-                    isStrokeCapRound: true,
-                    belowBarData: BarAreaData(
-                      show: true,
-                      color: Colors.blue.withOpacity(0.3),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _emissions.isEmpty
+                    ? const Center(child: Text("No data available"))
+                    : Padding(
+                        padding: const EdgeInsets.only(right: 20, top: 20),
+                        child: BarChart(
+                          BarChartData(
+                            alignment: BarChartAlignment.spaceAround,
+                            maxY: _emissions
+                                    .map((e) => e.emissions)
+                                    .reduce((a, b) => a > b ? a : b) *
+                                1.2,
+                            barTouchData: BarTouchData(
+                              touchTooltipData: BarTouchTooltipData(
+                                getTooltipColor: (_) => Colors.blueAccent,
+                                getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                                  return BarTooltipItem(
+                                    '${_emissions[groupIndex].location}\n',
+                                    const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    children: <TextSpan>[
+                                      TextSpan(
+                                        text: '${rod.toY.toStringAsFixed(1)} tons',
+                                        style: const TextStyle(
+                                          color: Colors.yellow,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                            titlesData: FlTitlesData(
+                              show: true,
+                              bottomTitles: AxisTitles(
+                                sideTitles: SideTitles(
+                                  showTitles: true,
+                                  getTitlesWidget: (value, meta) {
+                                    int index = value.toInt();
+                                    if (index >= 0 && index < _emissions.length) {
+                                      return Padding(
+                                        padding: const EdgeInsets.only(top: 8.0),
+                                        child: Text(
+                                          _emissions[index].location.split(',')[0],
+                                          style: const TextStyle(fontSize: 10),
+                                        ),
+                                      );
+                                    }
+                                    return const Text('');
+                                  },
+                                  reservedSize: 30,
+                                ),
+                              ),
+                              leftTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: true, reservedSize: 40),
+                              ),
+                              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                            ),
+                            gridData: const FlGridData(show: true),
+                            borderData: FlBorderData(show: false),
+                            barGroups: _emissions.asMap().entries.map((entry) {
+                              return BarChartGroupData(
+                                x: entry.key,
+                                barRods: [
+                                  BarChartRodData(
+                                    toY: entry.value.emissions,
+                                    color: Colors.blue,
+                                    width: 16,
+                                    borderRadius: const BorderRadius.only(
+                                      topLeft: Radius.circular(6),
+                                      topRight: Radius.circular(6),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                      ),
           ),
-          const SizedBox(height: 16), 
+          const SizedBox(height: 16),
 
-          
           Row(
             children: [
-              // Image on the left
               Expanded(
                 child: Container(
                   height: 400,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
                     image: const DecorationImage(
-                      image: AssetImage('assets/images/chart2.jpg'), 
+                      image: AssetImage('assets/images/chart2.jpg'),
                       fit: BoxFit.cover,
                     ),
                   ),
                 ),
               ),
-              const SizedBox(width: 16), 
-
+              const SizedBox(width: 16),
               Expanded(
                 child: Container(
                   height: 400,
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(10),
                     image: const DecorationImage(
-                      image: AssetImage('assets/images/chart1.jpg'), // Replace with your image asset
+                      image: AssetImage('assets/images/chart1.jpg'),
                       fit: BoxFit.cover,
                     ),
                   ),
